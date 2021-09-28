@@ -1,19 +1,13 @@
-__pycache__
-*.tflite
+# python related
+*.pyc
+
+# C/C++ related
+*.o
+*.d
+*.elf
+*.bin
+*.map
+
+# Temp files
 *.swp
 *.swo
-*.pyc
-*.log
-*.h5
-*.rst
-
-# AWS automation scripts (update here to explicitly push them to git)
-ec2
-ec2get
-ec2put
-ec2setup_optimus
-ec2setup_optimus.py
-ec2spot
-ec2ondemand
-ec2_multi_node.py
-ec2update
