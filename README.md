@@ -14,7 +14,7 @@ With similar or better image quality, SESR achieves 2x to 330x improvement (x2 a
 
 ## Prerequisites
 It is recommended to use a conda environment with python 3.6. Start by installing the requirements:
-Minimum requirements: tensorflow-gpu>=2.2 and tensorflow_datasets>=4.1. Install these using the following command:
+Minimum requirements: tensorflow-gpu>=2.3 and tensorflow_datasets>=4.1. Install these using the following command:
 
 `./install_requirements.sh`
 
