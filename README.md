@@ -1,9 +1,18 @@
-# SUPER-EFFICIENT SUPER RESOLUTION (SESR)
+## SUPER-EFFICIENT SUPER RESOLUTION (SESR)
 
 Code to accompany the paper: Collapsible Linear Blocks for Super-Efficient Super Resolution (https://arxiv.org/abs/2103.09404).
 
+With similar or better image quality, SESR achieves 2x to 330x improvement (x2 and x4 super resolution) in Multiply-Accumulate (MAC) operations compared to existing methods. 
 
-# Prerequisites
+![SESR Achieves State-of-the-art Super Resolution Results](/SESR_results.png)
+
+## Latest Updates
+**[New]** Quantization-Aware-Training support added for SESR networks. See "Running Quantization-Aware Training (QAT) and generating a TFLITE file" section below. Full int8 quantization (i.e., both weights and activations are quantized to 8-bits) of SESR results in minimal loss of PSNR: FP32 trained SESR-M5 achieves about 35.20dB PSNR on DIV2K dataset. INT8 SESR-M5 achieves 35.00dB PSNR.
+
+**[New]** TFLITE (Int8) can also be generated after QAT. See "Running Quantization-Aware Training (QAT) and generating a TFLITE file" section below.
+
+
+## Prerequisites
 It is recommended to use a conda environment with python 3.6. Start by installing the requirements:
 Minimum requirements: tensorflow-gpu>=2.2 and tensorflow_datasets>=4.1. Install these using the following command:
 
@@ -54,6 +63,15 @@ Train SESR-XL network with m = 11, f = 16, feature_size = 64, with collapsed lin
 
 `python train.py --m 11 --int_features 32 --feature_size 64 --scale 4`
 
+## Running Quantization-Aware Training (QAT) and generating a TFLITE file
+
+Run the following command to quantize the network while training and for generating a TFLITE (for x2 SISR, SESR-M5 network):
+
+`python train.py --quant_W --quant_A --gen_tflite`
+
+By default, the generated TFLITE inputs 1080p (1920x1080) image and outputs an upscaled image (based on x2 or x4 scale).
+
+
 ## File description
 | File | Description |
 | ------ | ------ |
@@ -69,6 +87,11 @@ Train SESR-XL network with m = 11, f = 16, feature_size = 64, with collapsed lin
 | batch_size | train.py | Batch size during training | 32 |
 | learning_rate | train.py | Learning rate for ADAM | 2e-4 |
 | model_name | train.py | Name of the model | 'SESR' |
+| quant_W | train.py | Quantize Weights (8-bits) | False |
+| quant_A | train.py | Quantize Activations (8-bits) | False |
+| gen_tflite | train.py | Generate int8 TFLITE after quantization-aware training is complete | False |
+| tflite_height | train.py | Height of Low-Resolution image in TFLITE | 1080 |
+| tflite_width | train.py | Width of Low-Resolution image in TFLITE | 1920 |
 | scale | utils.py | Scale of SISR (either x2 or x4 SISR) | 2 |
 | feature_size | models/sesr.py | Number of features inside linear blocks (used for SESR only) | 256 |
 | int_features | models/sesr.py | Number of intermediate features within SESR (parameter f in paper). Used for SESR. | 16 |

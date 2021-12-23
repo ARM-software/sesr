@@ -17,21 +17,23 @@
 import tensorflow as tf
 import numpy as np
 
+from models.quantize_utils import fake_quant_with_min_max_vars_per_channel, fake_quant_with_min_max_vars, compute_ranges
 
 ##############################
 ## LINEAR BLOCK DEFINITIONS ##
 ##############################
 
-
 #EXPANDED Linear block
-class LinearBlock_e(tf.keras.Model):
+class LinearBlock_e(tf.keras.layers.Layer):
     def __init__(self,
                  in_filters: int,
                  num_inner_layers: int,
                  kernel_size: int,
                  padding: str,
                  out_filters: int,
-                 feature_size: int):
+                 feature_size: int,
+                 quant_W: bool,
+                 mode: str):
         super().__init__()
         """
         Expanded linear block. Input --> 3x3 Conv to expand number of channels 
@@ -42,6 +44,7 @@ class LinearBlock_e(tf.keras.Model):
         very efficient method to train linear blocks without any loss in 
         image quality.
         """
+        assert not quant_W, 'expanded linear block not compatible with w quant'
 
         def conv2d(filters: int, kernel_size_: int) -> tf.keras.layers.Layer:
             return tf.keras.layers.Conv2D(filters=filters, kernel_size=kernel_size_, padding=padding)
@@ -51,21 +54,24 @@ class LinearBlock_e(tf.keras.Model):
             layers.extend([conv2d(filters=feature_size, kernel_size_=kernel_size)])
         layers.append(conv2d(filters=out_filters, kernel_size_=1))
         self.block = tf.keras.Sequential(layers)
+        self.mode = mode
 
     def call(self, inputs, training=None, mask=None):
         return self.block(inputs, training=training)
 
 
 #COLLAPSED Linear block
-class LinearBlock_c(tf.keras.Model):
+class LinearBlock_c(tf.keras.layers.Layer):
     def __init__(self,
                  in_filters: int,
                  num_inner_layers: int,
                  kernel_size: int,
                  padding: str,
                  out_filters: int,
-                 feature_size: int):
-        super().__init__()
+                 feature_size: int,
+                 quant_W: bool,
+                 mode: str):
+        tf.keras.layers.Layer.__init__(self)
 
         """
         This is a simulated linear block in the train path. The idea is to collapse 
@@ -99,6 +105,8 @@ class LinearBlock_c(tf.keras.Model):
         self.in_filters = in_filters
         self.out_filters = out_filters
         self.feature_size = feature_size
+        self.quant_W = quant_W
+        self.mode = mode
 
         # If num_inner_layers > 1, then use another conv1x1 at the beginning
         onebyone = True if num_inner_layers > 1 else False
@@ -107,8 +115,32 @@ class LinearBlock_c(tf.keras.Model):
         kernel_size = [kernel_size, kernel_size]
         self.kx, self.ky = kernel_size
 
+        # Learnable Collapse Conv's
+        conv1 = conv2d(feature_size, [1, 1], "valid")
+
+        conv2 = conv2d(feature_size, kernel_size, "valid")
+
+        conv3 = conv2d(out_filters, [1, 1], "valid")
+
+        self.collapsed_weights = None
+
+        # Define Collapse Block
+        if onebyone:
+            self.collapse = tf.keras.Sequential([conv1, conv2, conv3])
+        else:
+            self.collapse = tf.keras.Sequential([conv2, conv3])
+
+        if self.mode == 'train':
+            self.fake_quant_with_min_max_vars_per_channel_fn = \
+                fake_quant_with_min_max_vars_per_channel
+        elif self.mode == 'infer':
+            self.fake_quant_with_min_max_vars_per_channel_fn = \
+                tf.quantization.fake_quant_with_min_max_vars_per_channel 
+
+    def build(self, input_shapes):
+        
         # shape: (in_filters,in_filters)
-        delta = tf.eye(in_filters)
+        delta = tf.eye(self.in_filters)
 
         # expanded shape:(in_filters, 1, 1, in_filters)
         delta = tf.expand_dims(tf.expand_dims(delta, 1), 1)
@@ -118,19 +150,18 @@ class LinearBlock_c(tf.keras.Model):
 
         # Ensure the Value isn't trainable
         self.delta = tf.Variable(initial_value=delta, trainable=False, dtype=tf.float32)
-
-        # Learnable Collapse Conv's
-        conv1 = conv2d(feature_size, [1, 1], "valid")
-
-        conv2 = conv2d(feature_size, kernel_size, "valid")
-
-        conv3 = conv2d(out_filters, [1, 1], "valid")
-
-        # Define Collapse Block
-        if onebyone:
-            self.collapse = tf.keras.Sequential([conv1, conv2, conv3])
-        else:
-            self.collapse = tf.keras.Sequential([conv2, conv3])
+        
+        if self.quant_W:
+            self.wt_quant_min = self.add_weight(
+                name='wt_quant_min',
+                shape=(self.out_filters,),
+                trainable=True)
+            self.wt_quant_max = self.add_weight(
+                name='wt_quant_max',
+                shape=(self.out_filters,),
+                trainable=True)
+            if self.mode == "train":
+                self.wt_quant_initialized = tf.Variable(False, trainable=False)       
 
         # Calculate Residual
         kernel_dim = [self.kx, self.ky, self.in_filters, self.out_filters]
@@ -146,19 +177,57 @@ class LinearBlock_c(tf.keras.Model):
         # Ensure the Value isn't trainable
         self.residual = tf.Variable(initial_value=residual, trainable=False, dtype=tf.float32)
 
+    def init_wt_quant_ranges(self, kernel: tf.Tensor) -> None:
+        quant_max, quant_min = compute_ranges(kernel, per_channel=True, symmetric=True)
+        self.wt_quant_max.assign(quant_max)
+        self.wt_quant_min.assign(quant_min)
+        self.wt_quant_initialized.assign(True)
+
     def call(self, inputs):
-        # Run Through Conv2D's - online linear collapse
-        wt_tensor = self.collapse(self.delta)
+                   
+        if self.mode == "train" or (self.collapsed_weights is None):
+            # Run Through Conv2D's - online linear collapse
+            wt_tensor = self.collapse(self.delta)
 
-        # reverse order of elements in 1,2 axes
-        wt_tensor = tf.reverse(wt_tensor, tf.constant([1, 2]))
+            # reverse order of elements in 1,2 axes
+            wt_tensor = tf.reverse(wt_tensor, tf.constant([1, 2]))
 
-        # (in_filters, kx, ky, out_filters) -> (kx, ky, in_filters, out_filters)
-        wt_tensor = tf.transpose(wt_tensor, [1, 2, 0, 3])
+            # (in_filters, kx, ky, out_filters) -> (kx, ky, in_filters, out_filters)
+            wt_tensor = tf.transpose(wt_tensor, [1, 2, 0, 3])
 
-        # Direct-residual addition
-        # when in_filters != self.out_filters, this is just zeros
-        wt_tensor += self.residual
+            # Direct-residual addition
+            # when in_filters != self.out_filters, this is just zeros
+            wt_tensor += self.residual
+            
+            if self.mode == "infer":
+                # store collapsed weights in the first inferece, won't need to collapse again
+                self.collapsed_weights = tf.Variable(
+                    initial_value=wt_tensor,
+                    trainable=False,
+                    dtype=tf.float32)
+                # remove references to uncollapsed variables
+                self.collapse = None
+                    
+        else:
+            # use pre-collapsed weights
+            wt_tensor = self.collapsed_weights         
+
+        if self.mode == "train":
+            if self.quant_W:
+                if not self.wt_quant_initialized:
+                  self.init_wt_quant_ranges(wt_tensor)
+        elif self.mode == "infer":
+            pass
+        else:
+            assert False, self.mode
+
+        if self.quant_W:
+            wt_tensor = self.fake_quant_with_min_max_vars_per_channel_fn(
+                wt_tensor,
+                min=self.wt_quant_min,
+                max=self.wt_quant_max,
+                num_bits=8,
+                narrow_range=True)
 
         # Output - the actual conv2d
         out = tf.nn.conv2d(inputs, wt_tensor, strides=[1, 1, 1, 1], padding="SAME")

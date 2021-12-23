@@ -14,10 +14,11 @@
 # ==============================================================================
 
 
-from typing import Callable, List, Tuple
+from typing import Callable, List, Tuple, Optional
 import tensorflow as tf
 import tensorflow_datasets as tfds
 import numpy as np
+import os
 
 FLAGS = tf.compat.v1.flags.FLAGS
 tf.compat.v1.flags.DEFINE_integer('scale', 2, 'Scale of SISR')
@@ -88,4 +89,32 @@ def patches(lr: tf.Tensor, hr: tf.Tensor) -> Tuple[List[tf.Tensor], List[tf.Tens
     return list(lr), list(hr)
 
 
+#Generate INT8 TFLITE
+def generate_int8_tflite(model: tf.keras.Model,
+                         filename: str,
+                         path: Optional[str] = '/tmp',
+                         fake_quant: bool = False) -> str:
+    saved_model = path + '/' + filename
+    model.save(saved_model)
+    converter = tf.compat.v1.lite.TFLiteConverter.from_saved_model(saved_model)
+    converter.inference_type = tf.dtypes.int8
+    if fake_quant:  # give some default ranges for activations (for perf-eval only)
+        converter.default_ranges_stats = (-6., 6.)
+    input_arrays = converter.get_input_arrays()
+    # if input node has fake-quant node, then the following ranges would be
+    # overridden by fake-quant ranges.
+    converter.quantized_input_stats = {input_arrays[0]: (0., 1.)}
+    converter.target_spec.supported_ops = [
+      tf.lite.OpsSet.TFLITE_BUILTINS, # enable TensorFlow Lite ops.
+      tf.lite.OpsSet.SELECT_TF_OPS # enable TensorFlow ops.
+    ]
+    tflite_model = converter.convert()
+    
+    if not os.path.exists(path):
+        os.makedirs(path)
+    tflite_filename = path + '/' + filename + '.tflite'    
+    with open(tflite_filename, 'wb') as f:
+        f.write(tflite_model)
+    
+    return tflite_filename
 
