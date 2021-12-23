@@ -100,3 +100,15 @@ By default, the generated TFLITE inputs 1080p (1920x1080) image and outputs an u
 | m | models/sesr.py | Number of 3x3 layers (parameter m in paper). Used for SESR. | 5 |
 | linear_block_type | models/sesr.py | Specify whether to train a linear block which does an online collapsing during training, or a full expanded linear block: Options: "collapsed" [DEFAULT] or "expanded" | 'collapsed' |
 
+
+## Reference
+If you find this work useful, please consider citing our paper:
+
+```
+@article{bhardwaj2021collapsible, 
+  title={Collapsible Linear Blocks for Super-Efficient Super Resolution},
+  author={Bhardwaj, Kartikeya and Milosavljevic, Milos and O'Neil, Liam and Gope, Dibakar and Matas, Ramon and Chalfin, Alex and Suda, Naveen and Meng, Lingchuan and Loh, Danny},
+  journal={arXiv preprint arXiv:2103.09404},
+  year={2021}
+}
+```
