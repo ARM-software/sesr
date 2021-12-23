@@ -18,6 +18,8 @@ Minimum requirements: tensorflow-gpu>=2.2 and tensorflow_datasets>=4.1. Install 
 
 `./install_requirements.sh`
 
+PLEASE USE TENSORFLOW-GPU VERSION>=2.3 FOR QAT AND TFLITE SUPPORT.
+
 
 ## New Efficient Training Methodology
 The training time would increase if we directly train collapsible linear blocks in the expanded space and collapse them later. To address this, we developed an efficient implementation of SESR: We collapse the "Linear Blocks" at each training step (using Algorithms 1 and 2 shown in the paper), and then use this collapsed weight to perform forward pass convolutions. Since model weights are very small tensors compared to feature maps, this collapsing takes a very small time. _The training (backward pass) still updates the weights in the expanded space but the forward pass happens in collapsed space even during training_ (see figure below). Therefore, training the collapsible linear blocks is very efficient.
