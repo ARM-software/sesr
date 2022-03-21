@@ -11,6 +11,7 @@ With similar or better image quality, SESR achieves 2x to 330x improvement (x2 a
 **[New]** SESR accepted at the 5th Conference on Machine Learning and Systems (MLSys 2022). Latest version released on arXiv (link above) containing new results on open source NPU performance estimation, performance numbers on Arm CPU and GPU for a real mobile device, and more results. 
 
 **Older updates:**
+
 -- Quantization-Aware-Training support added for SESR networks. See "Running Quantization-Aware Training (QAT) and generating a TFLITE file" section below. Full int8 quantization (i.e., both weights and activations are quantized to 8-bits) of SESR results in minimal loss of PSNR: FP32 trained SESR-M5 achieves about 35.20dB PSNR on DIV2K dataset. INT8 SESR-M5 achieves 35.00dB PSNR.
 
 -- TFLITE (Int8) can also be generated after QAT. See "Running Quantization-Aware Training (QAT) and generating a TFLITE file" section below.
