@@ -1,6 +1,6 @@
 ## SUPER-EFFICIENT SUPER RESOLUTION (SESR)
 
-Code to accompany the paper: Collapsible Linear Blocks for Super-Efficient Super Resolution (https://arxiv.org/abs/2103.09404).
+Code to accompany the paper: Collapsible Linear Blocks for Super-Efficient Super Resolution (MLSys 2022) [https://arxiv.org/abs/2103.09404]
 
 With similar or better image quality, SESR achieves 2x to 330x improvement (x2 and x4 super resolution) in Multiply-Accumulate (MAC) operations compared to existing methods. 
 
